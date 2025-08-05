@@ -1,6 +1,9 @@
-import { createYoga, YogaInitialContext, Plugin } from '@graphql-yoga/node';
+import { createYoga, YogaInitialContext, Plugin } from 'graphql-yoga';
 import { Application } from 'express';
 import { GraphQLSchema } from 'graphql';
+import { PrismaClient } from '@prisma/client';
+import { getUserFromRequest } from './auth/jwt';
+import { hasPermission } from './auth/rbac';
 
 export interface EnterprisePlugin {
   name: string;
@@ -11,10 +14,20 @@ export interface EnterprisePlugin {
 export class EnterpriseServer {
   private plugins: EnterprisePlugin[] = [];
   private yoga: ReturnType<typeof createYoga>;
+  private prisma = new PrismaClient();
 
   constructor(private app: Application, baseSchema: GraphQLSchema) {
     this.yoga = createYoga({
       schema: baseSchema,
+      context: async ({ request }) => {
+        // Cast request to Express.Request for JWT extraction
+        const user = getUserFromRequest(request as any);
+        return {
+          prisma: this.prisma,
+          user,
+          hasPermission,
+        };
+      },
       plugins: [],
     });
     this.app.use('/graphql', this.yoga);
@@ -22,8 +35,7 @@ export class EnterpriseServer {
 
   registerPlugin(plugin: EnterprisePlugin) {
     this.plugins.push(plugin);
-    // Merge schemas and plugins dynamically (advanced logic can be added)
-    // For now, just log registration
+    // TODO: Merge schemas and plugins for dynamic modules
     console.log(`Plugin registered: ${plugin.name}`);
   }
 
